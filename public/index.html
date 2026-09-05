@@ -1,0 +1,486 @@
+<!doctype html>
+<html lang="cs">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>Rezervace času</title>
+<meta name="description" content="Rezervujte si čas online — jednoduše a rychle." />
+
+<!-- Fonts -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<!-- Tailwind (Play CDN) -->
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          ink:    '#14211E',
+          paper:  '#F6F1E4',
+          line:   '#DDD3BC',
+          accent: '#C08A28',
+          accentDeep: '#8C5F1B',
+          okgreen: '#3F7A5B',
+        },
+        fontFamily: {
+          display: ['"Fraunces"', 'serif'],
+          sans: ['"Inter"', 'sans-serif'],
+        },
+        borderRadius: {
+          soft: '1.5rem',
+        }
+      }
+    }
+  }
+</script>
+
+<!-- Swiper -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.css" />
+<script src="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.js"></script>
+
+<!-- Flatpickr -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/flatpickr/4.6.13/flatpickr.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/flatpickr/4.6.13/flatpickr.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/flatpickr/4.6.13/l10n/cs.js"></script>
+
+<style>
+  body { font-family: 'Inter', sans-serif; background: #F6F1E4; }
+  .font-display { font-family: 'Fraunces', serif; }
+  /* Bottom-sheet modal transition */
+  #detailSheet { transition: transform .35s cubic-bezier(.32,.72,0,1); }
+  #detailSheet.closed { transform: translateY(100%); }
+  #backdrop { transition: opacity .3s ease; }
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-thumb { background: #DDD3BC; border-radius: 4px; }
+  .flatpickr-calendar { font-family: 'Inter', sans-serif; border-radius: 1rem !important; box-shadow: 0 12px 32px rgba(20,33,30,.18) !important; }
+  .flatpickr-day.selected { background: #C08A28 !important; border-color: #C08A28 !important; }
+  .flatpickr-day.today { border-color: #C08A28 !important; }
+  .swiper-slide img, .swiper-slide video { width: 100%; height: 100%; object-fit: cover; }
+  .swiper-button-next, .swiper-button-prev { color: #F6F1E4 !important; }
+  .swiper-pagination-bullet-active { background: #C08A28 !important; }
+  .tag-pill { border: 1px solid #DDD3BC; }
+</style>
+</head>
+
+<body class="text-ink antialiased">
+
+<!-- ===================== HEADER ===================== -->
+<header class="sticky top-0 z-30 bg-paper/90 backdrop-blur border-b border-line">
+  <div class="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
+    <span class="font-display text-lg font-semibold tracking-tight" data-i18n="brand">Rezervace</span>
+    <button id="langToggle" class="flex items-center gap-1 text-sm font-medium bg-ink text-paper rounded-full px-1 py-1">
+      <span id="langCzBtn" class="px-2.5 py-1 rounded-full">CZ</span>
+      <span id="langEnBtn" class="px-2.5 py-1 rounded-full">EN</span>
+    </button>
+  </div>
+</header>
+
+<!-- ===================== HERO ===================== -->
+<section class="bg-ink text-paper">
+  <div class="max-w-5xl mx-auto px-4 pt-14 pb-16 md:pt-20 md:pb-24">
+    <h1 class="font-display text-4xl md:text-6xl leading-[1.05] max-w-xl" data-i18n="heroTitle">
+      Váš čas,<br>rezervovaný jednoduše.
+    </h1>
+    <p class="mt-5 text-paper/70 max-w-md text-base md:text-lg" data-i18n="heroSubtitle">
+      Vyberte specialistu, prohlédněte si nabídku a zarezervujte si volný termín během chvilky.
+    </p>
+  </div>
+</section>
+
+<!-- ===================== ITEMS GRID ===================== -->
+<main class="max-w-5xl mx-auto px-4 py-10 md:py-14">
+  <h2 class="font-display text-2xl md:text-3xl mb-6" data-i18n="itemsTitle">Naši specialisté</h2>
+
+  <div id="loadingState" class="text-ink/50 text-sm py-8 text-center" data-i18n="loading">Načítání…</div>
+  <div id="emptyState" class="hidden text-ink/50 text-sm py-8 text-center" data-i18n="empty">Zatím žádné karty k zobrazení.</div>
+  <div id="itemsGrid" class="grid grid-cols-1 sm:grid-cols-2 gap-5"></div>
+</main>
+
+<footer class="border-t border-line py-8">
+  <div class="max-w-5xl mx-auto px-4 text-xs text-ink/50 flex justify-between">
+    <span data-i18n="footerNote">Rezervace probíhá okamžitě po odeslání žádosti.</span>
+    <span>&copy; <span id="year"></span></span>
+  </div>
+</footer>
+
+<!-- ===================== DETAIL BOTTOM SHEET ===================== -->
+<div id="backdrop" class="hidden fixed inset-0 bg-ink/50 z-40 opacity-0"></div>
+<div id="detailSheet" class="closed fixed inset-x-0 bottom-0 z-50 bg-paper rounded-t-soft max-h-[92vh] overflow-y-auto shadow-2xl">
+  <div class="sticky top-0 bg-paper/95 backdrop-blur flex justify-end px-4 pt-3 pb-1">
+    <button id="closeSheet" aria-label="Close" class="w-9 h-9 rounded-full flex items-center justify-center bg-ink/5 hover:bg-ink/10 text-ink text-lg">✕</button>
+  </div>
+
+  <div class="px-5 pb-10">
+    <div id="mediaSwiper" class="swiper rounded-soft overflow-hidden bg-ink/10 aspect-[4/3] mb-5">
+      <div class="swiper-wrapper" id="swiperWrapper"></div>
+      <div class="swiper-pagination"></div>
+      <div class="swiper-button-prev"></div>
+      <div class="swiper-button-next"></div>
+    </div>
+
+    <h3 id="detailName" class="font-display text-2xl md:text-3xl mb-2"></h3>
+    <p id="detailDescription" class="text-ink/70 leading-relaxed mb-4"></p>
+
+    <div class="mb-2 text-sm font-medium text-ink/60" data-i18n="servicesLabel">Nabízené služby</div>
+    <div id="detailServices" class="flex flex-wrap gap-2 mb-6"></div>
+
+    <a id="whatsappBtn" href="#" target="_blank" rel="noopener"
+       class="flex items-center justify-center gap-2 w-full py-3 rounded-full bg-[#25D366] text-white font-medium mb-8 hover:opacity-90 transition">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a10 10 0 0 0-8.6 15L2 22l5.2-1.4A10 10 0 1 0 12 2zm0 18a8 8 0 0 1-4.1-1.1l-.3-.2-3 .8.8-2.9-.2-.3A8 8 0 1 1 12 20zm4.4-6c-.2-.1-1.4-.7-1.6-.8s-.4-.1-.5.1-.6.8-.7.9-.3.2-.5.1a6.5 6.5 0 0 1-3.3-2.9c-.2-.4.2-.4.6-1.2.1-.2 0-.4 0-.5s-.5-1.2-.7-1.7-.4-.4-.5-.4h-.5a1 1 0 0 0-.7.3 3 3 0 0 0-.9 2.2c0 1.3 1 2.6 1.1 2.8.1.2 2 3 4.7 4.2.7.3 1.2.5 1.6.6.7.2 1.3.2 1.8.1.5-.1 1.4-.6 1.6-1.1s.2-1 .1-1.1-.2-.2-.4-.3z"/></svg>
+      <span data-i18n="whatsappBtn">Napsat na WhatsApp</span>
+    </a>
+
+    <div class="border-t border-line pt-6">
+      <h4 class="font-display text-xl mb-3" data-i18n="bookTitle">Zarezervovat termín</h4>
+      <p class="text-sm text-ink/60 mb-3" data-i18n="bookHint">Vyberte datum a čas (Po–Ne, 00:00–23:59).</p>
+
+      <input id="datetimePicker" class="w-full border border-line rounded-xl px-4 py-3 mb-3 bg-white" readonly data-i18n-placeholder="pickDatetime" placeholder="Zvolit datum a čas">
+
+      <div id="slotWarning" class="hidden text-sm text-red-600 mb-3" data-i18n="slotTaken">Tento čas je již obsazený, zvolte prosím jiný.</div>
+
+      <input id="clientName" type="text" class="w-full border border-line rounded-xl px-4 py-3 mb-3 bg-white" data-i18n-placeholder="namePlaceholder" placeholder="Vaše jméno">
+      <input id="clientContact" type="text" class="w-full border border-line rounded-xl px-4 py-3 mb-4 bg-white" data-i18n-placeholder="contactPlaceholder" placeholder="Telefon nebo e-mail">
+
+      <button id="submitBooking" class="w-full py-3.5 rounded-full bg-accent text-white font-medium hover:bg-accentDeep transition disabled:opacity-40" data-i18n="submitBtn">
+        Odeslat žádost o rezervaci
+      </button>
+      <p id="bookingMsg" class="text-sm mt-3 text-center"></p>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ============================= I18N ============================= */
+const translations = {
+  cz: {
+    brand: 'Rezervace',
+    heroTitle: 'Váš čas,<br>rezervovaný jednoduše.',
+    heroSubtitle: 'Vyberte specialistu, prohlédněte si nabídku a zarezervujte si volný termín během chvilky.',
+    itemsTitle: 'Naši specialisté',
+    loading: 'Načítání…',
+    empty: 'Zatím žádné karty k zobrazení.',
+    footerNote: 'Rezervace probíhá okamžitě po odeslání žádosti.',
+    viewDetail: 'Zobrazit',
+    servicesLabel: 'Nabízené služby',
+    whatsappBtn: 'Napsat na WhatsApp',
+    bookTitle: 'Zarezervovat termín',
+    bookHint: 'Vyberte datum a čas (Po–Ne, 00:00–23:59).',
+    pickDatetime: 'Zvolit datum a čas',
+    slotTaken: 'Tento čas je již obsazený, zvolte prosím jiný.',
+    namePlaceholder: 'Vaše jméno',
+    contactPlaceholder: 'Telefon nebo e-mail',
+    submitBtn: 'Odeslat žádost o rezervaci',
+    submitting: 'Odesílání…',
+    successMsg: 'Žádost odeslána! Ozveme se vám co nejdříve.',
+    errorMsg: 'Něco se nepovedlo. Zkuste to prosím znovu.',
+    fillAll: 'Vyplňte prosím všechna pole.',
+    flatpickrLocale: 'cs',
+  },
+  en: {
+    brand: 'Booking',
+    heroTitle: 'Your time,<br>booked the easy way.',
+    heroSubtitle: 'Pick a specialist, browse what they offer, and reserve a free slot in a moment.',
+    itemsTitle: 'Our specialists',
+    loading: 'Loading…',
+    empty: 'No cards to show yet.',
+    footerNote: 'Your booking is reserved as soon as you submit it.',
+    viewDetail: 'View',
+    servicesLabel: 'Services offered',
+    whatsappBtn: 'Message on WhatsApp',
+    bookTitle: 'Reserve a time slot',
+    bookHint: 'Pick a date and time (Mon–Sun, 00:00–23:59).',
+    pickDatetime: 'Choose date & time',
+    slotTaken: 'This time is already taken, please choose another.',
+    namePlaceholder: 'Your name',
+    contactPlaceholder: 'Phone or email',
+    submitBtn: 'Send booking request',
+    submitting: 'Sending…',
+    successMsg: 'Request sent! We will get back to you shortly.',
+    errorMsg: 'Something went wrong. Please try again.',
+    fillAll: 'Please fill in all fields.',
+    flatpickrLocale: 'default',
+  }
+};
+
+let currentLang = 'cz';
+let currentItems = [];
+let currentItem = null;
+let currentSwiper = null;
+let scheduleCache = {}; // { "itemId-YYYY-MM": { dayOffs:[], bookedSlots:[] } }
+let flatpickrInstance = null;
+
+function t(key) {
+  return translations[currentLang][key] || key;
+}
+
+function applyStaticTranslations() {
+  document.documentElement.lang = currentLang === 'cz' ? 'cs' : 'en';
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    el.innerHTML = t(el.getAttribute('data-i18n'));
+  });
+  document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+    el.setAttribute('placeholder', t(el.getAttribute('data-i18n-placeholder')));
+  });
+  document.getElementById('langCzBtn').classList.toggle('bg-accent', currentLang === 'cz');
+  document.getElementById('langEnBtn').classList.toggle('bg-accent', currentLang === 'en');
+}
+
+document.getElementById('langToggle').addEventListener('click', () => {
+  currentLang = currentLang === 'cz' ? 'en' : 'cz';
+  applyStaticTranslations();
+  renderItemsGrid();
+  if (currentItem) renderItemDetail(currentItem);
+});
+
+document.getElementById('year').textContent = new Date().getFullYear();
+
+/* ============================= DATA FETCH ============================= */
+async function fetchItems() {
+  try {
+    const res = await fetch('/api/items');
+    currentItems = await res.json();
+    document.getElementById('loadingState').classList.add('hidden');
+    if (currentItems.length === 0) {
+      document.getElementById('emptyState').classList.remove('hidden');
+    } else {
+      renderItemsGrid();
+    }
+  } catch (err) {
+    document.getElementById('loadingState').textContent = t('errorMsg');
+  }
+}
+
+function renderItemsGrid() {
+  const grid = document.getElementById('itemsGrid');
+  grid.innerHTML = currentItems.map(item => `
+    <button class="text-left bg-white rounded-soft overflow-hidden border border-line hover:shadow-lg transition group" onclick="openItem(${item.id})">
+      <div class="aspect-[4/3] bg-ink/5 overflow-hidden">
+        ${item.cover
+          ? `<img src="/${item.cover}" class="w-full h-full object-cover group-hover:scale-105 transition duration-500" alt="">`
+          : `<div class="w-full h-full flex items-center justify-center text-ink/20 font-display text-3xl">?</div>`}
+      </div>
+      <div class="p-4">
+        <h3 class="font-display text-lg mb-1">${escapeHtml(currentLang === 'cz' ? item.name_cz : item.name_en)}</h3>
+        <p class="text-sm text-ink/60 line-clamp-2">${escapeHtml(currentLang === 'cz' ? item.description_cz : item.description_en)}</p>
+        <span class="inline-block mt-3 text-sm font-medium text-accentDeep">${t('viewDetail')} →</span>
+      </div>
+    </button>
+  `).join('');
+}
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str || '';
+  return div.innerHTML;
+}
+
+/* ============================= ITEM DETAIL ============================= */
+async function openItem(id) {
+  const res = await fetch(`/api/items/${id}`);
+  if (!res.ok) return;
+  currentItem = await res.json();
+  renderItemDetail(currentItem);
+  openSheet();
+  const now = new Date();
+  loadScheduleForMonth(id, now.getFullYear(), now.getMonth() + 1);
+}
+
+function renderItemDetail(item) {
+  document.getElementById('detailName').textContent = currentLang === 'cz' ? item.name_cz : item.name_en;
+  document.getElementById('detailDescription').textContent = currentLang === 'cz' ? item.description_cz : item.description_en;
+
+  const services = currentLang === 'cz' ? item.services_cz : item.services_en;
+  document.getElementById('detailServices').innerHTML = (services || []).map(s =>
+    `<span class="tag-pill text-sm px-3 py-1.5 rounded-full text-ink/80">${escapeHtml(s)}</span>`
+  ).join('') || `<span class="text-sm text-ink/40">—</span>`;
+
+  const digits = (item.whatsapp_number || '').replace(/\D/g, '');
+  document.getElementById('whatsappBtn').href = digits ? `https://wa.me/${digits}` : '#';
+
+  // Swiper media
+  const wrapper = document.getElementById('swiperWrapper');
+  wrapper.innerHTML = (item.media && item.media.length)
+    ? item.media.map(m => `
+        <div class="swiper-slide">
+          ${m.type === 'video'
+            ? `<video src="/${m.file_path}" controls playsinline></video>`
+            : `<img src="/${m.file_path}" alt="">`}
+        </div>`).join('')
+    : `<div class="swiper-slide flex items-center justify-center text-ink/30 font-display text-2xl">—</div>`;
+
+  if (currentSwiper) currentSwiper.destroy(true, true);
+  currentSwiper = new Swiper('#mediaSwiper', {
+    loop: (item.media || []).length > 1,
+    pagination: { el: '.swiper-pagination', clickable: true },
+    navigation: { nextEl: '.swiper-button-next', prevEl: '.swiper-button-prev' },
+  });
+
+  resetBookingForm();
+  initDatetimePicker(item);
+}
+
+/* ============================= BOOKING FORM ============================= */
+function resetBookingForm() {
+  document.getElementById('clientName').value = '';
+  document.getElementById('clientContact').value = '';
+  document.getElementById('bookingMsg').textContent = '';
+  document.getElementById('slotWarning').classList.add('hidden');
+  document.getElementById('submitBooking').disabled = false;
+}
+
+function initDatetimePicker(item) {
+  if (flatpickrInstance) flatpickrInstance.destroy();
+
+  const locale = currentLang === 'cz'
+    ? Object.assign({}, flatpickr.l10ns.cs, { firstDayOfWeek: 1 })
+    : Object.assign({}, flatpickr.l10ns.default, { firstDayOfWeek: 1 });
+
+  flatpickrInstance = flatpickr('#datetimePicker', {
+    enableTime: true,
+    time_24hr: true,
+    minuteIncrement: 5,
+    dateFormat: 'Y-m-d H:i',
+    minDate: 'today',
+    locale,
+    disable: [
+      (date) => isDayOff(item.id, date),
+    ],
+    onChange: () => validateSelection(item),
+    onMonthChange: (selectedDates, dateStr, instance) => {
+      const d = instance.currentYear;
+      loadScheduleForMonth(item.id, instance.currentYear, instance.currentMonth + 1);
+    },
+  });
+}
+
+function monthKey(itemId, year, month) {
+  return `${itemId}-${year}-${String(month).padStart(2, '0')}`;
+}
+
+async function loadScheduleForMonth(itemId, year, month) {
+  const key = monthKey(itemId, year, month);
+  if (scheduleCache[key]) return;
+  try {
+    const res = await fetch(`/api/items/${itemId}/schedule?year=${year}&month=${month}`);
+    scheduleCache[key] = await res.json();
+    if (flatpickrInstance) flatpickrInstance.redraw();
+  } catch (err) {
+    // тиха відмова — просто не блокуємо дати, серверна перевірка все одно захистить
+  }
+}
+
+function isDayOff(itemId, date) {
+  const key = monthKey(itemId, date.getFullYear(), date.getMonth() + 1);
+  const data = scheduleCache[key];
+  if (!data) return false;
+  const dateStr = toDateStr(date);
+  return data.dayOffs.includes(dateStr);
+}
+
+function toDateStr(date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+function validateSelection(item) {
+  const value = flatpickrInstance.selectedDates[0];
+  const warning = document.getElementById('slotWarning');
+  const submitBtn = document.getElementById('submitBooking');
+  if (!value) return;
+
+  const dateStr = toDateStr(value);
+  const timeStr = `${String(value.getHours()).padStart(2, '0')}:${String(value.getMinutes()).padStart(2, '0')}`;
+  const key = monthKey(item.id, value.getFullYear(), value.getMonth() + 1);
+  const data = scheduleCache[key];
+  const duration = item.default_duration_minutes || 60;
+
+  let conflict = false;
+  if (data) {
+    const newStart = value.getHours() * 60 + value.getMinutes();
+    const newEnd = newStart + duration;
+    conflict = data.bookedSlots.some(slot => {
+      if (slot.date !== dateStr) return false;
+      const [h, m] = slot.start.split(':').map(Number);
+      const start = h * 60 + m;
+      const end = start + slot.duration;
+      return newStart < end && start < newEnd;
+    });
+  }
+
+  warning.classList.toggle('hidden', !conflict);
+  submitBtn.disabled = conflict;
+}
+
+document.getElementById('submitBooking').addEventListener('click', async () => {
+  const msg = document.getElementById('bookingMsg');
+  const name = document.getElementById('clientName').value.trim();
+  const contact = document.getElementById('clientContact').value.trim();
+  const selected = flatpickrInstance?.selectedDates[0];
+
+  if (!selected || !name || !contact) {
+    msg.textContent = t('fillAll');
+    msg.className = 'text-sm mt-3 text-center text-red-600';
+    return;
+  }
+
+  const date = toDateStr(selected);
+  const time = `${String(selected.getHours()).padStart(2, '0')}:${String(selected.getMinutes()).padStart(2, '0')}`;
+
+  const btn = document.getElementById('submitBooking');
+  btn.disabled = true;
+  msg.textContent = t('submitting');
+  msg.className = 'text-sm mt-3 text-center text-ink/50';
+
+  try {
+    const res = await fetch(`/api/items/${currentItem.id}/bookings`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ date, time, name, contact }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      msg.textContent = data.error || t('errorMsg');
+      msg.className = 'text-sm mt-3 text-center text-red-600';
+      btn.disabled = false;
+      return;
+    }
+    msg.textContent = t('successMsg');
+    msg.className = 'text-sm mt-3 text-center text-okgreen';
+    delete scheduleCache[monthKey(currentItem.id, selected.getFullYear(), selected.getMonth() + 1)];
+    loadScheduleForMonth(currentItem.id, selected.getFullYear(), selected.getMonth() + 1);
+  } catch (err) {
+    msg.textContent = t('errorMsg');
+    msg.className = 'text-sm mt-3 text-center text-red-600';
+    btn.disabled = false;
+  }
+});
+
+/* ============================= SHEET OPEN/CLOSE ============================= */
+function openSheet() {
+  document.getElementById('backdrop').classList.remove('hidden');
+  requestAnimationFrame(() => {
+    document.getElementById('backdrop').classList.remove('opacity-0');
+    document.getElementById('detailSheet').classList.remove('closed');
+  });
+  document.body.style.overflow = 'hidden';
+}
+function closeSheet() {
+  document.getElementById('backdrop').classList.add('opacity-0');
+  document.getElementById('detailSheet').classList.add('closed');
+  document.body.style.overflow = '';
+  setTimeout(() => document.getElementById('backdrop').classList.add('hidden'), 300);
+}
+document.getElementById('closeSheet').addEventListener('click', closeSheet);
+document.getElementById('backdrop').addEventListener('click', closeSheet);
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeSheet(); });
+
+/* ============================= INIT ============================= */
+applyStaticTranslations();
+fetchItems();
+</script>
+</body>
+</html>
